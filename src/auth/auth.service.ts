@@ -512,7 +512,9 @@ export class AuthService {
         secret: this.configService.get('JWT_SECRET'),
       });
     } catch {
-      throw new UnauthorizedException('Invalid or expired Google connect state');
+      throw new UnauthorizedException(
+        'Invalid or expired Google connect state',
+      );
     }
     if (payload.purpose !== 'google-connect') {
       throw new UnauthorizedException('Invalid Google connect state');
