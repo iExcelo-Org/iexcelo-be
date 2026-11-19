@@ -98,5 +98,5 @@ jobs:
             --cpu=1 \
             --memory=512Mi \
             --timeout=60 \
-            --set-env-vars="NODE_ENV=production,DATABASE_PORT=5432,DATABASE_SSL=true,REDIS_PORT=6379,REDIS_TLS=true,REDIS_USERNAME=app,SMTP_HOST=smtp-relay.brevo.com,SMTP_PORT=587,SMTP_FROM_NAME=iExcelo" \
+            --set-env-vars="NODE_ENV=production,APP_ENV=production,DATABASE_PORT=5432,DATABASE_SSL=true,REDIS_PORT=6379,REDIS_TLS=true,REDIS_USERNAME=app,SMTP_HOST=smtp-relay.brevo.com,SMTP_PORT=587,SMTP_FROM_NAME=iExcelo" \
             --set-secrets="$SECRETS"
