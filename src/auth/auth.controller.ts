@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-
 import {
   Controller,
   Get,
@@ -12,6 +10,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Query,
   UnauthorizedException,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
@@ -22,6 +21,10 @@ import {
 } from '../common/guards';
 import { ConfigService } from '@nestjs/config';
 import { Public } from '../common/decorators/public.decorator';
+import {
+  pickReturnTo,
+  resolveReturnTo,
+} from '../common/utils/google-return-to';
 import type { Request, Response } from 'express';
 import { User } from '../users/entities/user.entity';
 import {
@@ -114,8 +117,15 @@ export class AuthController {
   @Get('google/connect-init')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  googleConnectInit(@Req() req: Request & { user: User & { userId: string } }) {
-    const state = this.authService.generateConnectStateToken(req.user.userId);
+  googleConnectInit(
+    @Req() req: Request & { user: User & { userId: string } },
+    @Query('returnTo') returnTo?: string,
+  ) {
+    // returnTo only survives on staging, and only for an allowed origin
+    const state = this.authService.generateConnectStateToken(
+      req.user.userId,
+      pickReturnTo(returnTo, this.configService),
+    );
     return { success: true, state };
   }
 
@@ -137,11 +147,13 @@ export class AuthController {
         _needsOnboarding?: boolean;
         _connectResult?: { message: string };
         _connectUserId?: string;
+        _returnTo?: string;
       };
     },
     @Res() res: Response,
   ) {
-    const frontendUrl = this.configService.get('FRONTEND_URL');
+    // FRONTEND_URL, unless this is staging and the user started from an allowed preview
+    const frontendUrl = resolveReturnTo(req.user._returnTo, this.configService);
 
     // Connect flow — linked successfully, redirect back to security settings
     if (req.user._connectResult) {
