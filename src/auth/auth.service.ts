@@ -496,21 +496,17 @@ export class AuthService {
     return { message: 'Verification code resent successfully' };
   }
 
-  // Generate short-lived signed state token for Google connect flow.
-  // returnTo is only passed on staging, already checked against the origin rules.
-  generateConnectStateToken(userId: string, returnTo?: string): string {
+  // Generate short-lived signed state token for Google connect flow
+  generateConnectStateToken(userId: string): string {
     return this.jwtService.sign(
-      { sub: userId, purpose: 'google-connect', ...(returnTo && { returnTo }) },
+      { sub: userId, purpose: 'google-connect' },
       { secret: this.configService.get('JWT_SECRET'), expiresIn: '5m' },
     );
   }
 
-  // Verify a connect state token and extract the userId and optional return address
-  verifyConnectStateToken(token: string): {
-    userId: string;
-    returnTo?: string;
-  } {
-    let payload: { sub: string; purpose: string; returnTo?: string };
+  // Verify and extract userId from a connect state token
+  verifyConnectStateToken(token: string): string {
+    let payload: { sub: string; purpose: string };
     try {
       payload = this.jwtService.verify(token, {
         secret: this.configService.get('JWT_SECRET'),
@@ -523,7 +519,7 @@ export class AuthService {
     if (payload.purpose !== 'google-connect') {
       throw new UnauthorizedException('Invalid Google connect state');
     }
-    return { userId: payload.sub, returnTo: payload.returnTo };
+    return payload.sub;
   }
 
   // Generate temporary exchange token for OAuth callback

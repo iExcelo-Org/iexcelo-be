@@ -36,21 +36,14 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   ): Promise<any> {
     const { id, name, emails } = profile;
 
-    // The state param is one of:
-    //   - a return address (sign-in from a staging preview, see GoogleAuthGuard)
-    //   - a signed JWT for the connect flow, verified before trusting its userId
-    //   - empty or 'login' for a plain sign-in
-    // The return address is checked again in the callback, so it is only carried here.
+    // The state param carries a signed JWT for the connect flow.
+    // Verify the token before trusting the userId it contains.
     const rawState = req?.query?.state as string | undefined;
     let connectUserId: string | undefined;
-    let returnTo: string | undefined;
 
-    if (rawState && rawState.includes('://')) {
-      returnTo = rawState;
-    } else if (rawState && rawState !== 'login') {
+    if (rawState && rawState !== 'login') {
       try {
-        ({ userId: connectUserId, returnTo } =
-          this.authService.verifyConnectStateToken(rawState));
+        connectUserId = this.authService.verifyConnectStateToken(rawState);
       } catch {
         return done(
           new UnauthorizedException('Invalid or expired Google connect state'),
@@ -69,7 +62,6 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       return done(null, {
         _connectResult: result,
         _connectUserId: connectUserId,
-        _returnTo: returnTo,
       });
     }
 
@@ -87,7 +79,6 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       ...result.user,
       _isNewUser: result.isNewUser,
       _needsOnboarding: result.needsOnboarding,
-      _returnTo: returnTo,
     });
   }
 }
