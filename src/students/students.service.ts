@@ -272,7 +272,11 @@ export class StudentsService {
     const questionCountMap = new Map(
       etsRecords.map((e) => [
         e.subjectId,
-        etsCountMap.get(e.id) ?? { total: 0, theoryCount: 0, practicalCount: 0 },
+        etsCountMap.get(e.id) ?? {
+          total: 0,
+          theoryCount: 0,
+          practicalCount: 0,
+        },
       ]),
     );
 
@@ -473,8 +477,10 @@ export class StudentsService {
         theoryCount: questionCountMap.get(s.subject.id)?.theoryCount ?? 0,
         practicalCount: questionCountMap.get(s.subject.id)?.practicalCount ?? 0,
         questionsAttempted: subjectProgressMap.get(s.subject.id)?.count ?? 0,
-        theoryAttempted: subjectProgressMap.get(s.subject.id)?.theoryAttempted ?? 0,
-        practicalAttempted: subjectProgressMap.get(s.subject.id)?.practicalAttempted ?? 0,
+        theoryAttempted:
+          subjectProgressMap.get(s.subject.id)?.theoryAttempted ?? 0,
+        practicalAttempted:
+          subjectProgressMap.get(s.subject.id)?.practicalAttempted ?? 0,
       })),
       stats: {
         totalExamsCompleted,
