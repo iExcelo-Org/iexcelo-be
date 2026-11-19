@@ -2,16 +2,19 @@
  * stripe-seed-products.ts
  *
  * Creates Stripe products and recurring prices for all exam types and
- * currencies, then writes the externalId mapping to stripe-prices.json.
+ * currencies, then writes the externalId mapping to stripe-prices.json
+ * in the current working directory (run it from the Backend root).
  *
- * Usage:
+ * Usage (from the Backend root):
+ *   node --env-file=.env scripts/stripe-seed-products.ts
  *   npx ts-node -r dotenv/config scripts/stripe-seed-products.ts
  *
  *   Override key for a specific account (sandbox or live):
  *   STRIPE_SECRET_KEY=sk_live_xxx npx ts-node scripts/stripe-seed-products.ts
  *
  * Idempotent: searches for existing products/prices by metadata key before
- * creating, so it is safe to re-run.
+ * creating, so it is safe to re-run. Stripe search can lag by about a
+ * minute, so wait a couple of minutes between runs.
  */
 
 import Stripe from 'stripe';
@@ -215,8 +218,10 @@ async function main() {
   }
 
   // ── Write JSON output file ────────────────────────────────────────────────
-  // Write to Backend root (one level up from scripts/)
-  const outFile = path.join(__dirname, '..', 'stripe-prices.json');
+  // Written to the current working directory (run this from the Backend root,
+  // next to package.json). __dirname does not exist when Node loads this file
+  // as an ES module, so a cwd-relative path is used, matching migration 008.
+  const outFile = path.resolve('stripe-prices.json');
   fs.writeFileSync(outFile, JSON.stringify(results, null, 2));
 
   console.log('\n\n' + '='.repeat(60));

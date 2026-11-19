@@ -31,12 +31,21 @@ async function bootstrap() {
   app.setGlobalPrefix('api/v1');
 
   // ========== CORS ==========
+  const extraOrigins = (
+    configService.get<string>('CORS_EXTRA_ORIGINS') ?? ''
+  ).split(/[\s,]+/); // accepts spaces or commas between URLs
+
   const allowedOrigins = [
-    configService.get<string>('FRONTEND_URL') ?? '',
-    configService.get<string>('ADMIN_URL') ?? '',
-  ]
-    .filter(Boolean)
-    .map((u) => u.replace(/\/$/, '')); // strip trailing slashes
+    ...new Set(
+      [
+        configService.get<string>('FRONTEND_URL') ?? '',
+        configService.get<string>('ADMIN_URL') ?? '',
+        ...extraOrigins,
+      ]
+        .map((u) => u.trim().replace(/\/$/, '')) // strip whitespace and trailing slashes
+        .filter(Boolean),
+    ),
+  ];
 
   if (allowedOrigins.length === 0) {
     logger.warn(

@@ -1,0 +1,115 @@
+name: Backend =::= Production Lint & Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+env:
+  REGION: europe-west1
+  AR_REPO: apps
+  IMAGE_NAME: iexcelo-backend
+  SERVICE: iexcelo-backend
+  MIGRATE_JOB: iexcelo-backend-migrate
+  PREFIX: iexcelo
+  NETWORK: main-vpc
+  SUBNET: sn-run
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run lint
+
+  deploy:
+    name: Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    needs: lint
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PROJECT: ${{ secrets.NEW_GCP_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.NEW_GCP_WIF_PROVIDER }}
+          service_account: ci-prod@${{ secrets.NEW_GCP_PROJECT_ID }}.iam.gserviceaccount.com
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${AR_REPO}/${IMAGE_NAME}:${GITHUB_SHA}"
+          echo "IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Run schema migrations (no seeds until cutover)
+        run: |
+          gcloud run jobs deploy "$MIGRATE_JOB" \
+            --image="$IMAGE" \
+            --region="$REGION" \
+            --service-account="api-run@${PROJECT}.iam.gserviceaccount.com" \
+            --network="$NETWORK" --subnet="$SUBNET" --vpc-egress=private-ranges-only \
+            --command=npm --args=run,migrate:schema \
+            --max-retries=0 --task-timeout=600 \
+            --set-env-vars="NODE_ENV=production,DATABASE_PORT=5432,DATABASE_USER=migrator,DATABASE_SSL=true" \
+            --set-secrets="DATABASE_HOST=${PREFIX}-db-host:latest,DATABASE_NAME=${PREFIX}-db-name:latest,DATABASE_PASSWORD=${PREFIX}-migrator-db-password:latest,DATABASE_CA_CERT=iexcelo-db-ca-cert:latest" \
+            --execute-now --wait
+
+      - name: Deploy to Cloud Run
+        run: |
+          SECRET_VARS="JWT_SECRET=jwt-secret X_API_KEY=x-api-key SMTP_USER=smtp-user SMTP_PASS=smtp-pass SMTP_FROM=smtp-from \
+            R2_BUCKET_NAME=r2-bucket-name R2_ACCESS_KEY_ID=r2-access-key-id R2_SECRET_ACCESS_KEY=r2-secret-access-key R2_PUBLIC_URL=r2-public-url \
+            CLOUDFLARE_ACCOUNT_ID=cf-account-id DATABASE_USER=db-user DATABASE_NAME=db-name DATABASE_HOST=db-host DATABASE_PASSWORD=db-password \
+            REDIS_HOST=redis-host REDIS_PASSWORD=redis-password PAYSTACK_SECRET_KEY=paystack-secret STRIPE_SECRET_KEY=stripe-secret \
+            STRIPE_WEBHOOK_SECRET=stripe-webhook-secret VAPID_PUBLIC_KEY=vapid-public-key VAPID_PRIVATE_KEY=vapid-private-key \
+            FRONTEND_URL=frontend-url ADMIN_URL=admin-url CORS_EXTRA_ORIGINS=cors-extra-origins \
+            GOOGLE_CLIENT_ID=google-client-id GOOGLE_CLIENT_SECRET=google-client-secret GOOGLE_CALLBACK_URL=google-callback-url"
+          SECRETS=""
+          for pair in $SECRET_VARS; do
+            SECRETS+="${SECRETS:+,}${pair%%=*}=${PREFIX}-${pair#*=}:latest"
+          done
+          SECRETS+=",DATABASE_CA_CERT=iexcelo-db-ca-cert:latest"   # shared, not prefixed
+
+          gcloud run deploy "$SERVICE" \
+            --image="$IMAGE" \
+            --region="$REGION" \
+            --platform=managed \
+            --service-account="api-run@${PROJECT}.iam.gserviceaccount.com" \
+            --network="$NETWORK" --subnet="$SUBNET" --vpc-egress=private-ranges-only \
+            --allow-unauthenticated \
+            --port=3000 \
+            --command="node" \
+            --args="dist/src/main" \
+            --min-instances=0 \
+            --max-instances=3 \
+            --concurrency=80 \
+            --cpu=1 \
+            --memory=512Mi \
+            --timeout=60 \
+            --set-env-vars="NODE_ENV=production,DATABASE_PORT=5432,DATABASE_SSL=true,REDIS_PORT=6379,REDIS_TLS=true,REDIS_USERNAME=app,SMTP_HOST=smtp-relay.brevo.com,SMTP_PORT=587,SMTP_FROM_NAME=iExcelo" \
+            --set-secrets="$SECRETS"

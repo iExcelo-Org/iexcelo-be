@@ -62,6 +62,7 @@ import { migration008 } from '../scripts/008-stripe-price-ids';
 import { migration009 } from '../scripts/009-paystack-plan-ids';
 import { migration010 } from '../scripts/010-plan-badge-perks';
 import { migration011 } from '../scripts/011-disable-post-jamb-sat';
+import { TlsOptions } from 'tls';
 
 const ALL_MIGRATIONS = [
   migration001,
@@ -125,9 +126,15 @@ async function createDataSource(): Promise<DataSource> {
     ],
     synchronize: false,
     ssl:
-      process.env.NODE_ENV === 'production'
-        ? { rejectUnauthorized: false }
-        : false,
+      process.env.DATABASE_SSL === 'true'
+        ? ({
+            ca: process.env.DATABASE_CA_CERT,
+            rejectUnauthorized: true,
+            servername: 'db.internal',
+          } as TlsOptions)
+        : process.env.NODE_ENV === 'production'
+          ? { rejectUnauthorized: false }
+          : false,
   });
 
   await ds.initialize();

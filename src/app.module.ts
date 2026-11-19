@@ -39,14 +39,21 @@ import { AdminModule } from './admin/admin.module';
 
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60000, limit: 120 }]),
 
-    // BullMQ global connection — all queue modules share this Redis config
+    // BullMQ global connection — all queue modules share this Redis config.
+    // REDIS_TLS=true + REDIS_USERNAME + DATABASE_CA_CERT are set on Cloud Run for the new setup.
+    // When they are unset (local dev, old deployment) the connection behaves exactly as before.
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         connection: {
           host: configService.get<string>('REDIS_HOST', 'localhost'),
           port: configService.get<number>('REDIS_PORT', 6379),
+          username: configService.get<string>('REDIS_USERNAME') || undefined,
           password: configService.get<string>('REDIS_PASSWORD') || undefined,
+          tls:
+            configService.get<string>('REDIS_TLS') === 'true'
+              ? { ca: configService.get<string>('DATABASE_CA_CERT') }
+              : undefined,
         },
       }),
       inject: [ConfigService],
@@ -64,10 +71,17 @@ import { AdminModule } from './admin/admin.module';
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         synchronize: configService.get('NODE_ENV') === 'development',
         logging: configService.get('NODE_ENV') === 'development',
+        // DATABASE_SSL=true: verified TLS against our CA (new setup).
+        // Otherwise keep the old behaviour so the current live deployment is unaffected.
         ssl:
-          configService.get('NODE_ENV') === 'production'
-            ? { rejectUnauthorized: false }
-            : false,
+          configService.get('DATABASE_SSL') === 'true'
+            ? {
+                ca: configService.get<string>('DATABASE_CA_CERT'),
+                rejectUnauthorized: true,
+              }
+            : configService.get('NODE_ENV') === 'production'
+              ? { rejectUnauthorized: false }
+              : false,
       }),
       inject: [ConfigService],
     }),

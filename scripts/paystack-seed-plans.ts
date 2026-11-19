@@ -2,9 +2,11 @@
  * paystack-seed-plans.ts
  *
  * Creates Paystack subscription plans for NGN and GHS, then writes
- * plan codes to paystack-plans.json in the Backend root.
+ * plan codes to paystack-plans.json in the current working directory
+ * (run it from the Backend root).
  *
- * Usage:
+ * Usage (from the Backend root):
+ *   node --env-file=.env scripts/paystack-seed-plans.ts
  *   npx ts-node -r dotenv/config scripts/paystack-seed-plans.ts
  *
  * Paystack intervals used:
@@ -133,6 +135,10 @@ async function findOrCreatePlan(
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
+  const isLive = PAYSTACK_KEY!.startsWith('sk_live');
+  console.log(`\nPaystack account: ${isLive ? 'LIVE' : 'TEST'}`);
+  console.log('='.repeat(60));
+
   console.log('\nFetching existing Paystack plans...');
   const allPlans = await listPlans();
   console.log(`  Found ${allPlans.length} existing plan(s)`);
@@ -164,12 +170,12 @@ async function main() {
       }
     }
 
-    console.log(
-      `  (2-Month Plan skipped — Paystack has no matching interval)`,
-    );
+    console.log(`  (2-Month Plan skipped — Paystack has no matching interval)`);
   }
 
-  const outFile = path.join(__dirname, '..', 'paystack-plans.json');
+  // Written to the current working directory (run from the Backend root).
+  // __dirname does not exist when Node loads this file as an ES module.
+  const outFile = path.resolve('paystack-plans.json');
   fs.writeFileSync(outFile, JSON.stringify(results, null, 2));
 
   console.log('\n\n' + '='.repeat(60));

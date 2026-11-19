@@ -11,6 +11,7 @@ import 'reflect-metadata';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { DataSource } from 'typeorm';
+import type { TlsOptions } from 'tls';
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
@@ -26,7 +27,13 @@ export default new DataSource({
   migrationsTableName: 'typeorm_migrations',
   synchronize: false,
   ssl:
-    process.env.NODE_ENV === 'production'
-      ? { rejectUnauthorized: false }
-      : false,
+    process.env.DATABASE_SSL === 'true'
+      ? ({
+          ca: process.env.DATABASE_CA_CERT,
+          rejectUnauthorized: true,
+          servername: 'db.internal', // the IP is not in the cert's names, db.internal is
+        } as TlsOptions)
+      : process.env.NODE_ENV === 'production'
+        ? { rejectUnauthorized: false } // legacy fallback for the old deployment only
+        : false,
 });

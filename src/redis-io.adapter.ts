@@ -11,7 +11,13 @@ export class RedisIoAdapter extends IoAdapter {
     const opts = {
       host: configService.get<string>('REDIS_HOST', 'localhost'),
       port: configService.get<number>('REDIS_PORT', 6379),
+      username: configService.get<string>('REDIS_USERNAME') || undefined,
       password: configService.get<string>('REDIS_PASSWORD') || undefined,
+      // REDIS_TLS=true is set on Cloud Run only; local dev and the old deployment connect as before.
+      tls:
+        configService.get<string>('REDIS_TLS') === 'true'
+          ? { ca: configService.get<string>('DATABASE_CA_CERT') }
+          : undefined,
     };
 
     const pubClient = new Redis(opts);
