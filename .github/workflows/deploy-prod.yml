@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-prod
+  group: deploy-prod-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -16,7 +16,6 @@ env:
   AR_REPO: apps
   IMAGE_NAME: iexcelo-backend
   SERVICE: iexcelo-backend
-  MIGRATE_JOB: iexcelo-backend-migrate
   PREFIX: iexcelo
   NETWORK: main-vpc
   SUBNET: sn-run
@@ -39,6 +38,7 @@ jobs:
     name: Deploy to Cloud Run
     runs-on: ubuntu-latest
     needs: lint
+    # Only deploy from the main branch itself: never from PRs or manual runs on other branches.
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     permissions:
       contents: read
@@ -66,19 +66,6 @@ jobs:
           echo "IMAGE=${IMAGE}" >> "$GITHUB_ENV"
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
-
-      - name: Run schema migrations (no seeds until cutover)
-        run: |
-          gcloud run jobs deploy "$MIGRATE_JOB" \
-            --image="$IMAGE" \
-            --region="$REGION" \
-            --service-account="api-run@${PROJECT}.iam.gserviceaccount.com" \
-            --network="$NETWORK" --subnet="$SUBNET" --vpc-egress=private-ranges-only \
-            --command=npm --args=run,migrate:schema \
-            --max-retries=0 --task-timeout=600 \
-            --set-env-vars="NODE_ENV=production,DATABASE_PORT=5432,DATABASE_USER=migrator,DATABASE_SSL=true" \
-            --set-secrets="DATABASE_HOST=${PREFIX}-db-host:latest,DATABASE_NAME=${PREFIX}-db-name:latest,DATABASE_PASSWORD=${PREFIX}-migrator-db-password:latest,DATABASE_CA_CERT=iexcelo-db-ca-cert:latest" \
-            --execute-now --wait
 
       - name: Deploy to Cloud Run
         run: |
