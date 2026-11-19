@@ -9,6 +9,11 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
 import { ApiKeyGuard } from './common/guards';
 import { ConfigService } from '@nestjs/config';
 import { RedisIoAdapter } from './redis-io.adapter';
+import {
+  describeOriginRules,
+  isAllowedOrigin,
+  loadOriginRules,
+} from './common/utils/allowed-origins';
 
 async function bootstrap() {
   const isProduction = process.env.NODE_ENV === 'production';
@@ -33,28 +38,14 @@ async function bootstrap() {
   app.setGlobalPrefix('api/v1');
 
   // ========== CORS ==========
-  const extraOrigins = (
-    configService.get<string>('CORS_EXTRA_ORIGINS') ?? ''
-  ).split(/[\s,]+/); // accepts spaces or commas between URLs
+  const originRules = loadOriginRules((k) => configService.get<string>(k));
 
-  const allowedOrigins = [
-    ...new Set(
-      [
-        configService.get<string>('FRONTEND_URL') ?? '',
-        configService.get<string>('ADMIN_URL') ?? '',
-        ...extraOrigins,
-      ]
-        .map((u) => u.trim().replace(/\/$/, '')) // strip whitespace and trailing slashes
-        .filter(Boolean),
-    ),
-  ];
-
-  if (allowedOrigins.length === 0) {
+  if (originRules.exact.length === 0 && originRules.wildcards.length === 0) {
     logger.warn(
-      'No FRONTEND_URL or ADMIN_URL set -- CORS will block all browser requests',
+      'No FRONTEND_URL, ADMIN_URL or CORS_EXTRA_ORIGINS set -- CORS will block all browser requests',
     );
   } else {
-    logger.log(`CORS allowed origins: ${allowedOrigins.join(', ')}`);
+    logger.log(`CORS allowed origins: ${describeOriginRules(originRules)}`);
   }
 
   app.enableCors({
@@ -64,7 +55,7 @@ async function bootstrap() {
     ) {
       // Allow server-to-server / Postman requests (no origin header)
       if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
+      if (isAllowedOrigin(origin, originRules)) return callback(null, true);
       callback(new Error(`CORS: origin "${origin}" not allowed`));
     },
     credentials: true,
