@@ -123,6 +123,11 @@ export class ExchangeTokenDto {
   token: string;
 }
 
+export class ConfirmGoogleConnectDto {
+  @IsString()
+  token: string;
+}
+
 export class RefreshTokenDto {
   @IsString()
   refreshToken: string;

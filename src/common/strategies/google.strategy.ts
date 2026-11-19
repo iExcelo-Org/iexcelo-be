@@ -53,15 +53,17 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     }
 
     if (connectUserId) {
-      // Connect flow: link this Google account to the already-authenticated user.
-      const result = await this.authService.connectGoogleToUser(
-        connectUserId,
-        id,
-        emails[0].value,
-      );
+      // Connect flow. Do not link here: this callback cannot tell who is in the browser, so a
+      // connect state started by one account and completed by someone else would link that
+      // person's Google to the first account. Hand back a short-lived link token instead.
+      // The frontend confirms it with the signed-in user's own session, and the link only
+      // happens when that user is the one who started the connect.
       return done(null, {
-        _connectResult: result,
-        _connectUserId: connectUserId,
+        _connectLinkToken: this.authService.generateConnectLinkToken(
+          connectUserId,
+          id,
+          emails[0].value,
+        ),
       });
     }
 

@@ -71,6 +71,10 @@ export class ChatsGateway implements OnGatewayConnection, OnGatewayDisconnect {
         secret: this.configService.get<string>('JWT_SECRET'),
       });
 
+      // Connect state and link tokens share this secret but are never session tokens.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      if (payload.purpose) throw new WsException('Invalid token');
+
       // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       socket.userId = payload.sub as string;
 
