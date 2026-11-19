@@ -4,6 +4,9 @@
 import {
   Injectable,
   UnauthorizedException,
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
@@ -526,6 +529,57 @@ export class AuthService {
     return { userId: payload.sub, returnTo: payload.returnTo };
   }
 
+  // Carries a finished Google sign-in back to the frontend for the connect flow.
+  // It links nothing by itself; see confirmGoogleConnect.
+  generateConnectLinkToken(
+    userId: string,
+    googleId: string,
+    googleEmail: string,
+  ): string {
+    return this.jwtService.sign(
+      { sub: userId, googleId, googleEmail, purpose: 'google-connect-link' },
+      { secret: this.configService.get('JWT_SECRET'), expiresIn: '5m' },
+    );
+  }
+
+  // Links the Google account in a link token, but only for the user who started the connect.
+  // userId comes from the caller's own session, never from the token.
+  async confirmGoogleConnect(
+    userId: string,
+    token: string,
+  ): Promise<{ message: string }> {
+    let payload: {
+      sub: string;
+      googleId: string;
+      googleEmail?: string;
+      purpose: string;
+    };
+    try {
+      payload = this.jwtService.verify(token, {
+        secret: this.configService.get('JWT_SECRET'),
+      });
+    } catch {
+      throw new BadRequestException(
+        'This Google connect link is invalid or has expired. Please try again.',
+      );
+    }
+    if (payload.purpose !== 'google-connect-link' || !payload.googleId) {
+      throw new BadRequestException('Invalid Google connect link');
+    }
+    // 403, not 401: the session is fine, so the frontend must not log the user out.
+    if (payload.sub !== userId) {
+      throw new ForbiddenException(
+        'This Google connect was started from a different account',
+      );
+    }
+
+    return this.connectGoogleToUser(
+      userId,
+      payload.googleId,
+      payload.googleEmail,
+    );
+  }
+
   // Generate temporary exchange token for OAuth callback
   generateExchangeToken(userId: string): string {
     const payload: ExchangeTokenPayload = {
@@ -722,6 +776,9 @@ export class AuthService {
       });
     } catch {
       throw new UnauthorizedException('Invalid or expired exchange token');
+    }
+    if (payload.purpose) {
+      throw new UnauthorizedException('Invalid exchange token');
     }
 
     const user = await this.usersService.findById(payload.sub);
@@ -1102,6 +1159,11 @@ export class AuthService {
    * while keeping refresh token management in the database. For now, this DB lookup ensures consistency.
    */
   async validateAccessTokenPayload(payload: TokenPayload): Promise<User> {
+    // Connect state and link tokens share this secret but are never session tokens.
+    if (payload.purpose) {
+      throw new UnauthorizedException('Invalid token');
+    }
+
     // Admin tokens have no refreshTokenId — validate by user lookup only.
     if (!payload.refreshTokenId) {
       const user = await this.usersService.findById(payload.sub);
@@ -1612,19 +1674,21 @@ export class AuthService {
     const user = await this.usersService.findById(userId);
     if (!user) throw new UnauthorizedException('User not found');
 
+    // Conflicts are 409, not 401, so the frontend does not treat them as an expired session.
+
     // Account already has Google connected (via provider field)
     if (
       user.provider === AuthProvider.GOOGLE ||
       user.provider === AuthProvider.DUAL
     ) {
-      throw new UnauthorizedException(
+      throw new ConflictException(
         'Google is already connected to this account',
       );
     }
 
     // Defensive: account has a different googleId stored even if provider hasn't been updated
     if (user.googleId && user.googleId !== googleId) {
-      throw new UnauthorizedException(
+      throw new ConflictException(
         'This account already has a different Google account associated with it',
       );
     }
@@ -1632,7 +1696,7 @@ export class AuthService {
     // The incoming Google account is already linked to a different iExcelo account
     const existing = await this.usersService.findByGoogleId(googleId);
     if (existing && existing.id !== userId) {
-      throw new UnauthorizedException(
+      throw new ConflictException(
         'This Google account is already connected to a different iExcelo account',
       );
     }

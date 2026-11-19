@@ -32,6 +32,7 @@ import {
   VerifyEmailDto,
   CompleteOnboardingDto,
   ExchangeTokenDto,
+  ConfirmGoogleConnectDto,
   RefreshTokenDto,
   ForgotPasswordDto,
   ResetPasswordDto,
@@ -129,6 +130,22 @@ export class AuthController {
     return { success: true, state };
   }
 
+  // Second half of the connect flow. The callback only hands the frontend a link token; the
+  // link happens here, against the caller's own session.
+  @Post('google/connect-confirm')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async googleConnectConfirm(
+    @Req() req: Request & { user: User & { userId: string } },
+    @Body() body: ConfirmGoogleConnectDto,
+  ) {
+    const result = await this.authService.confirmGoogleConnect(
+      req.user.userId,
+      body.token,
+    );
+    return { success: true, message: result.message };
+  }
+
   @Public()
   @Get('google')
   @UseGuards(GoogleAuthGuard)
@@ -145,8 +162,7 @@ export class AuthController {
       user: User & {
         _isNewUser?: boolean;
         _needsOnboarding?: boolean;
-        _connectResult?: { message: string };
-        _connectUserId?: string;
+        _connectLinkToken?: string;
         _returnTo?: string;
       };
     },
@@ -155,10 +171,10 @@ export class AuthController {
     // FRONTEND_URL, unless this is staging and the user started from an allowed preview
     const frontendUrl = resolveReturnTo(req.user._returnTo, this.configService);
 
-    // Connect flow — linked successfully, redirect back to security settings
-    if (req.user._connectResult) {
+    // Connect flow: back to security settings, which confirms the link with the user's session
+    if (req.user._connectLinkToken) {
       return res.redirect(
-        `${frontendUrl}/student/settings/password?connected=true`,
+        `${frontendUrl}/student/settings/password?googleLink=${encodeURIComponent(req.user._connectLinkToken)}`,
       );
     }
 
