@@ -10,7 +10,9 @@ export class AppService {
         status: 'ok',
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
-        environment: process.env.NODE_ENV || 'development',
+        // APP_ENV tells staging and production apart. Both run with NODE_ENV=production.
+        environment:
+          process.env.APP_ENV || process.env.NODE_ENV || 'development',
       },
     };
   }
