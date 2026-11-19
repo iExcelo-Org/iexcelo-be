@@ -147,9 +147,15 @@ async function main() {
     password: process.env.DATABASE_PASSWORD ?? 'postgres',
     database: process.env.DATABASE_NAME ?? 'iexcelo',
     ssl:
-      process.env.NODE_ENV === 'production'
-        ? { rejectUnauthorized: false }
-        : false,
+      process.env.DATABASE_SSL === 'true'
+        ? {
+            ca: process.env.DATABASE_CA_CERT,
+            rejectUnauthorized: true,
+            servername: 'db.internal', // the IP is not in the cert's names, db.internal is
+          }
+        : process.env.NODE_ENV === 'production'
+          ? { rejectUnauthorized: false } // legacy fallback for the old deployment only
+          : false,
   });
 
   await client.connect();

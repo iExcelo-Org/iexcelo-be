@@ -16,7 +16,10 @@ export class RedisIoAdapter extends IoAdapter {
       // REDIS_TLS=true is set on Cloud Run only; local dev and the old deployment connect as before.
       tls:
         configService.get<string>('REDIS_TLS') === 'true'
-          ? { ca: configService.get<string>('DATABASE_CA_CERT') }
+          ? {
+              ca: configService.get<string>('DATABASE_CA_CERT'),
+              servername: 'db.internal', // the IP is not in the cert's names, db.internal is
+            }
           : undefined,
     };
 
