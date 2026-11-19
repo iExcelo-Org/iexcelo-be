@@ -52,7 +52,10 @@ import { AdminModule } from './admin/admin.module';
           password: configService.get<string>('REDIS_PASSWORD') || undefined,
           tls:
             configService.get<string>('REDIS_TLS') === 'true'
-              ? { ca: configService.get<string>('DATABASE_CA_CERT') }
+              ? {
+                  ca: configService.get<string>('DATABASE_CA_CERT'),
+                  servername: 'db.internal', // the IP is not in the cert's names, db.internal is
+                }
               : undefined,
         },
       }),
@@ -78,6 +81,7 @@ import { AdminModule } from './admin/admin.module';
             ? {
                 ca: configService.get<string>('DATABASE_CA_CERT'),
                 rejectUnauthorized: true,
+                servername: 'db.internal', // the IP is not in the cert's names, db.internal is
               }
             : configService.get('NODE_ENV') === 'production'
               ? { rejectUnauthorized: false }
