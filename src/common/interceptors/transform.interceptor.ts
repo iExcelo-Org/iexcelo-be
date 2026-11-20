@@ -28,13 +28,22 @@ export class TransformInterceptor<T>
       map((data) => {
         const response = context.switchToHttp().getResponse();
 
+        // A controller may return its own { success, message, data } wrapper. Unwrap it whenever
+        // the data key is there, even when it holds null. Otherwise "nothing found" would reach
+        // the client as the wrapper object, which looks like real data.
+        const isWrapper =
+          data !== null &&
+          typeof data === 'object' &&
+          !Array.isArray(data) &&
+          'data' in data;
+
         // If controller already returned success/message, preserve them
         // Otherwise, add success and statusCode
         return {
           success: data?.success ?? true,
           statusCode: response.statusCode,
           message: data?.message,
-          data: data?.data ?? data,
+          data: isWrapper ? (data.data ?? null) : data,
         };
       }),
     );
